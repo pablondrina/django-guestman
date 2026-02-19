@@ -1,0 +1,105 @@
+"""Address service."""
+
+from guestman.models import Customer, CustomerAddress
+from guestman.services.customer import get
+
+
+def addresses(customer_code: str) -> list[CustomerAddress]:
+    """List customer addresses."""
+    cust = get(customer_code)
+    if not cust:
+        return []
+    return list(cust.addresses.all())
+
+
+def default_address(customer_code: str) -> CustomerAddress | None:
+    """Return default address."""
+    cust = get(customer_code)
+    if not cust:
+        return None
+    return cust.default_address
+
+
+def add_address(
+    customer_code: str,
+    label: str,
+    formatted_address: str,
+    place_id: str | None = None,
+    components: dict | None = None,
+    coordinates: tuple[float, float] | None = None,
+    complement: str = "",
+    delivery_instructions: str = "",
+    label_custom: str = "",
+    is_default: bool = False,
+) -> CustomerAddress:
+    """
+    Add address to customer.
+
+    Args:
+        customer_code: Customer code
+        label: "home", "work", "other"
+        formatted_address: Complete formatted address
+        place_id: Google Places ID
+        components: Dict with street_number, route, neighborhood, etc.
+        coordinates: (latitude, longitude)
+        complement: Complement
+        delivery_instructions: Delivery instructions
+        label_custom: Custom label (when label="other")
+        is_default: Set as default
+    """
+    cust = get(customer_code)
+    if not cust:
+        raise ValueError(f"Customer '{customer_code}' not found")
+
+    comp = components or {}
+
+    addr = CustomerAddress.objects.create(
+        customer=cust,
+        label=label,
+        label_custom=label_custom,
+        place_id=place_id or "",
+        formatted_address=formatted_address,
+        street_number=comp.get("street_number", ""),
+        route=comp.get("route", ""),
+        neighborhood=comp.get("neighborhood", ""),
+        city=comp.get("city", ""),
+        state=comp.get("state", ""),
+        state_code=comp.get("state_code", ""),
+        postal_code=comp.get("postal_code", ""),
+        country=comp.get("country", "Brasil"),
+        country_code=comp.get("country_code", "BR"),
+        latitude=coordinates[0] if coordinates else None,
+        longitude=coordinates[1] if coordinates else None,
+        complement=complement,
+        delivery_instructions=delivery_instructions,
+        is_default=is_default,
+        is_verified=bool(place_id),
+    )
+
+    return addr
+
+
+def set_default_address(customer_code: str, address_id: int) -> CustomerAddress:
+    """Set address as default."""
+    cust = get(customer_code)
+    if not cust:
+        raise ValueError(f"Customer '{customer_code}' not found")
+
+    addr = CustomerAddress.objects.get(pk=address_id, customer=cust)
+    addr.is_default = True
+    addr.save()
+    return addr
+
+
+def delete_address(customer_code: str, address_id: int) -> bool:
+    """Delete address."""
+    cust = get(customer_code)
+    if not cust:
+        return False
+
+    try:
+        addr = CustomerAddress.objects.get(pk=address_id, customer=cust)
+        addr.delete()
+        return True
+    except CustomerAddress.DoesNotExist:
+        return False
