@@ -32,4 +32,4 @@ def __getattr__(name):
 
 
 __all__ = ["Gates", "GateError", "GateResult"]
-__version__ = "0.5.0"
+__version__ = "0.2.0"
