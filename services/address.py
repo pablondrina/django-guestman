@@ -1,5 +1,11 @@
-"""Address service."""
+"""Address service.
 
+All operations that modify >1 record use transaction.atomic().
+"""
+
+from django.db import transaction
+
+from guestman.exceptions import GuestmanError
 from guestman.models import Customer, CustomerAddress
 from guestman.services.customer import get
 
@@ -49,32 +55,34 @@ def add_address(
     """
     cust = get(customer_code)
     if not cust:
-        raise ValueError(f"Customer '{customer_code}' not found")
+        raise GuestmanError("CUSTOMER_NOT_FOUND", customer_code=customer_code)
 
     comp = components or {}
 
-    addr = CustomerAddress.objects.create(
-        customer=cust,
-        label=label,
-        label_custom=label_custom,
-        place_id=place_id or "",
-        formatted_address=formatted_address,
-        street_number=comp.get("street_number", ""),
-        route=comp.get("route", ""),
-        neighborhood=comp.get("neighborhood", ""),
-        city=comp.get("city", ""),
-        state=comp.get("state", ""),
-        state_code=comp.get("state_code", ""),
-        postal_code=comp.get("postal_code", ""),
-        country=comp.get("country", "Brasil"),
-        country_code=comp.get("country_code", "BR"),
-        latitude=coordinates[0] if coordinates else None,
-        longitude=coordinates[1] if coordinates else None,
-        complement=complement,
-        delivery_instructions=delivery_instructions,
-        is_default=is_default,
-        is_verified=bool(place_id),
-    )
+    # is_default=True triggers save() which demotes other defaults → atomic
+    with transaction.atomic():
+        addr = CustomerAddress.objects.create(
+            customer=cust,
+            label=label,
+            label_custom=label_custom,
+            place_id=place_id or "",
+            formatted_address=formatted_address,
+            street_number=comp.get("street_number", ""),
+            route=comp.get("route", ""),
+            neighborhood=comp.get("neighborhood", ""),
+            city=comp.get("city", ""),
+            state=comp.get("state", ""),
+            state_code=comp.get("state_code", ""),
+            postal_code=comp.get("postal_code", ""),
+            country=comp.get("country", "Brasil"),
+            country_code=comp.get("country_code", "BR"),
+            latitude=coordinates[0] if coordinates else None,
+            longitude=coordinates[1] if coordinates else None,
+            complement=complement,
+            delivery_instructions=delivery_instructions,
+            is_default=is_default,
+            is_verified=bool(place_id),
+        )
 
     return addr
 
@@ -83,23 +91,28 @@ def set_default_address(customer_code: str, address_id: int) -> CustomerAddress:
     """Set address as default."""
     cust = get(customer_code)
     if not cust:
-        raise ValueError(f"Customer '{customer_code}' not found")
+        raise GuestmanError("CUSTOMER_NOT_FOUND", customer_code=customer_code)
 
-    addr = CustomerAddress.objects.get(pk=address_id, customer=cust)
-    addr.is_default = True
-    addr.save()
-    return addr
+    with transaction.atomic():
+        try:
+            addr = CustomerAddress.objects.get(pk=address_id, customer=cust)
+        except CustomerAddress.DoesNotExist:
+            raise GuestmanError("ADDRESS_NOT_FOUND", address_id=address_id)
+
+        addr.is_default = True
+        addr.save()
+        return addr
 
 
 def delete_address(customer_code: str, address_id: int) -> bool:
     """Delete address."""
     cust = get(customer_code)
     if not cust:
-        return False
+        raise GuestmanError("CUSTOMER_NOT_FOUND", customer_code=customer_code)
 
     try:
         addr = CustomerAddress.objects.get(pk=address_id, customer=cust)
         addr.delete()
         return True
     except CustomerAddress.DoesNotExist:
-        return False
+        raise GuestmanError("ADDRESS_NOT_FOUND", address_id=address_id)

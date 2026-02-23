@@ -250,7 +250,7 @@ class TestIdentifierService:
             identifier_type=IdentifierType.INSTAGRAM,
             identifier_value="@johndoe",
         )
-        assert ident.identifier_value == "@johndoe"
+        assert ident.identifier_value == "johndoe"
         assert ident.customer == customer
 
     def test_get_identifiers(self, customer):

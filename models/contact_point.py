@@ -5,7 +5,7 @@ ContactPoint model - Customer contact points (WhatsApp, phone, email).
 import re
 import uuid
 
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -30,10 +30,10 @@ class ContactPoint(models.Model):
     """
 
     class Type(models.TextChoices):
-        WHATSAPP = "whatsapp", "WhatsApp"
+        WHATSAPP = "whatsapp", _("WhatsApp")
         PHONE = "phone", _("Telefone (voz/SMS)")
-        EMAIL = "email", "Email"
-        INSTAGRAM = "instagram", "Instagram"
+        EMAIL = "email", _("Email")
+        INSTAGRAM = "instagram", _("Instagram")
 
     class VerificationMethod(models.TextChoices):
         UNVERIFIED = "unverified", _("Não verificado")
@@ -156,67 +156,24 @@ class ContactPoint(models.Model):
         """
         Normalize contact value to E.164 format.
 
-        Brazilian phone numbers:
-        - 11 digits: DDD (2) + mobile (9 digits) -> +55 + 11 digits
-        - 10 digits: DDD (2) + landline (8 digits) -> +55 + 10 digits
-        - Already with +55: keep as is
-        - With + but wrong (like +43984049009): fix to +5543984049009
+        Delegates to guestman.utils.normalize_phone for consistent normalization
+        across the entire package.
         """
-        if not value:
-            return value
+        from guestman.utils import normalize_phone
 
-        value = value.strip()
-
-        # Email: lowercase
-        if "@" in value:
-            return value.lower()
-
-        # Instagram: lowercase, remove @ if present
-        if contact_type == "instagram":
-            return value.lower().lstrip("@")
-
-        # Phone: remove all non-digits first
-        digits_only = re.sub(r"[^\d]", "", value)
-
-        # Handle Brazilian numbers
-        if len(digits_only) == 11:
-            # DDD (2 digits) + mobile (9 digits) - ex: 43984049009
-            return f"+55{digits_only}"
-        elif len(digits_only) == 10:
-            # DDD (2 digits) + landline (8 digits)
-            return f"+55{digits_only}"
-        elif len(digits_only) == 13 and digits_only.startswith("55"):
-            # Already correct: 5543984049009 -> +5543984049009
-            return f"+{digits_only}"
-        elif len(digits_only) == 12 and digits_only.startswith("55"):
-            # 55 + DDD + 8-digit landline
-            return f"+{digits_only}"
-        elif value.startswith("+") and len(digits_only) == 11:
-            # Bug do Manychat: +43984049009 (11 digits with +)
-            # Should be +5543984049009, so add 55
-            return f"+55{digits_only}"
-        elif len(digits_only) >= 12 and digits_only.startswith("55"):
-            # Has 55 at the beginning, just add +
-            return f"+{digits_only}"
-
-        # Fallback: assume Brazilian if 10-11 digits
-        if digits_only:
-            if len(digits_only) in (10, 11):
-                return f"+55{digits_only}"
-            return f"+{digits_only}"
-
-        return value
+        return normalize_phone(value, contact_type=contact_type)
 
     def set_as_primary(self):
         """Set this contact as primary for its type."""
-        ContactPoint.objects.filter(
-            customer=self.customer,
-            type=self.type,
-            is_primary=True,
-        ).exclude(pk=self.pk).update(is_primary=False)
+        with transaction.atomic():
+            ContactPoint.objects.filter(
+                customer=self.customer,
+                type=self.type,
+                is_primary=True,
+            ).exclude(pk=self.pk).update(is_primary=False)
 
-        self.is_primary = True
-        self.save(update_fields=["is_primary", "updated_at"])
+            self.is_primary = True
+            self.save(update_fields=["is_primary", "updated_at"])
 
     def mark_verified(self, method: str, ref: str | None = None):
         """Mark contact as verified."""

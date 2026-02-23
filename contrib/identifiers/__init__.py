@@ -27,5 +27,3 @@ def __getattr__(name):
 
 
 __all__ = ["IdentifierService"]
-
-default_app_config = "guestman.contrib.identifiers.apps.IdentifiersConfig"

@@ -1,0 +1,10 @@
+"""Consent app config."""
+
+from django.apps import AppConfig
+from django.utils.translation import gettext_lazy as _
+
+
+class ConsentConfig(AppConfig):
+    name = "guestman.contrib.consent"
+    label = "guestman_consent"
+    verbose_name = _("Consentimento de Comunicação")

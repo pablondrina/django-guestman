@@ -231,10 +231,7 @@ class ManychatService:
 
     @staticmethod
     def _normalize_phone(phone: str) -> str:
-        """Normalize phone number."""
-        import re
+        """Normalize phone number. Delegates to centralized normalize_phone."""
+        from guestman.utils import normalize_phone
 
-        digits = re.sub(r"\D", "", phone)
-        if len(digits) == 11:  # DDD + number
-            digits = f"55{digits}"
-        return digits
+        return normalize_phone(phone)

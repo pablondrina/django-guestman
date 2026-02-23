@@ -9,6 +9,7 @@ from datetime import timedelta
 
 from django.db import models
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
 
 class ProcessedEvent(models.Model):
@@ -19,14 +20,14 @@ class ProcessedEvent(models.Model):
     from being processed twice in a distributed environment.
     """
 
-    nonce = models.CharField(max_length=255, unique=True, db_index=True)
-    provider = models.CharField(max_length=50, db_index=True)
-    processed_at = models.DateTimeField(auto_now_add=True)
+    nonce = models.CharField(verbose_name=_("nonce"), max_length=255, unique=True, db_index=True)
+    provider = models.CharField(verbose_name=_("provedor"), max_length=50, db_index=True)
+    processed_at = models.DateTimeField(verbose_name=_("processado em"), auto_now_add=True)
 
     class Meta:
         db_table = "guestman_processed_event"
-        verbose_name = "processed event"
-        verbose_name_plural = "processed events"
+        verbose_name = _("evento processado")
+        verbose_name_plural = _("eventos processados")
         indexes = [
             models.Index(fields=["provider", "processed_at"]),
         ]
@@ -35,8 +36,10 @@ class ProcessedEvent(models.Model):
         return f"{self.provider}:{self.nonce[:20]}"
 
     @classmethod
-    def cleanup_old_events(cls, days: int = 7):
+    def cleanup_old_events(cls, days: int | None = None):
         """Remove events older than N days."""
+        if days is None:
+            from guestman.conf import guestman_settings
+            days = guestman_settings.EVENT_CLEANUP_DAYS
         cutoff = timezone.now() - timedelta(days=days)
-        deleted, _ = cls.objects.filter(processed_at__lt=cutoff).delete()
-        return deleted
+        return cls.objects.filter(processed_at__lt=cutoff).delete()

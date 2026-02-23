@@ -1,5 +1,6 @@
 """Insight service for calculation and retrieval."""
 
+import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 from collections import Counter
@@ -10,6 +11,8 @@ from django.utils.module_loading import import_string
 from guestman.contrib.insights.models import CustomerInsight
 from guestman.models import Customer
 from guestman.protocols.orders import OrderHistoryBackend
+
+logger = logging.getLogger(__name__)
 
 
 def _get_order_backend() -> OrderHistoryBackend | None:
@@ -141,7 +144,14 @@ class InsightService:
             insight.average_days_between_orders,
         )
 
-        insight.calculation_version = "v1"
+        # Predicted LTV (simple: avg_ticket * projected_orders_per_year)
+        insight.predicted_ltv_q = cls._calculate_ltv(
+            insight.average_ticket_q,
+            insight.average_days_between_orders,
+            insight.total_orders,
+        )
+
+        insight.calculation_version = "v2"
         insight.save()
 
         return insight
@@ -151,16 +161,18 @@ class InsightService:
         """
         Recalculate insights for all active customers.
 
+        Uses iterator() to avoid loading all customers into memory.
+
         Returns:
             Number of customers processed
         """
         count = 0
-        for customer in Customer.objects.filter(is_active=True):
+        for customer in Customer.objects.filter(is_active=True).only("code").iterator():
             try:
                 cls.recalculate(customer.code)
                 count += 1
-            except Exception:
-                pass  # Log error but continue
+            except (ValueError, TypeError, LookupError) as exc:
+                logger.warning("recalculate_all: skipped customer %s: %s", customer.code, exc)
         return count
 
     # ======================================================================
@@ -225,6 +237,68 @@ class InsightService:
         if r <= 2 and f <= 2:
             return "lost"
         return "regular"
+
+    @classmethod
+    def _calculate_ltv(
+        cls,
+        avg_ticket_q: int,
+        avg_days_between: Decimal | None,
+        total_orders: int,
+    ) -> int | None:
+        """
+        Predict 12-month LTV using simple frequency projection.
+
+        Formula: avg_ticket * (365 / avg_days_between_orders)
+        Falls back to historical average if frequency unknown.
+        """
+        if avg_ticket_q <= 0:
+            return 0
+
+        if avg_days_between and avg_days_between > 0:
+            orders_per_year = Decimal("365") / avg_days_between
+            return int(avg_ticket_q * orders_per_year)
+
+        # Fallback: extrapolate from total orders if we have history
+        if total_orders >= 2:
+            return avg_ticket_q * total_orders * 2
+        return None
+
+    @classmethod
+    def get_segment_customers(
+        cls,
+        segment: str,
+        limit: int = 100,
+    ) -> list[CustomerInsight]:
+        """
+        Get customers by RFM segment for behavior-based segmentation.
+
+        Args:
+            segment: RFM segment (champion, loyal_customer, recent_customer,
+                     at_risk, lost, regular)
+            limit: Max results
+
+        Returns:
+            List of CustomerInsight with customer pre-loaded
+        """
+        return list(
+            CustomerInsight.objects.filter(
+                rfm_segment=segment,
+                customer__is_active=True,
+            )
+            .select_related("customer")[:limit]
+        )
+
+    @classmethod
+    def get_at_risk_customers(cls, min_churn_risk: Decimal = Decimal("0.7")) -> list[CustomerInsight]:
+        """Get customers with high churn risk for retention campaigns."""
+        return list(
+            CustomerInsight.objects.filter(
+                churn_risk__gte=min_churn_risk,
+                customer__is_active=True,
+            )
+            .select_related("customer")
+            .order_by("-churn_risk")
+        )
 
     @classmethod
     def _calculate_churn_risk(

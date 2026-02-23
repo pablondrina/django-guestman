@@ -248,6 +248,18 @@ Features:
 - Address inlines
 - Order history link (if Omniman installed)
 
+## Shopman Suite
+
+Guestman is part of the [Shopman suite](https://github.com/pablondrina). The admin UI uses shared utilities from [django-shopman-commons](https://github.com/pablondrina/django-shopman-commons):
+
+- `BaseModelAdmin`, `BaseTabularInline` — textarea-aware admin classes for Unfold
+- `unfold_badge` — colored badge helpers
+
+```python
+from shopman_commons.contrib.admin_unfold.base import BaseModelAdmin, BaseTabularInline
+from shopman_commons.contrib.admin_unfold.badges import unfold_badge
+```
+
 ## Requirements
 
 - Python 3.11+

@@ -27,5 +27,3 @@ def __getattr__(name):
 
 
 __all__ = ["InsightService"]
-
-default_app_config = "guestman.contrib.insights.apps.InsightsConfig"

@@ -10,12 +10,12 @@ class IdentifierType(models.TextChoices):
     """Supported identifier types."""
 
     PHONE = "phone", _("Telefone")
-    EMAIL = "email", "Email"
-    INSTAGRAM = "instagram", "Instagram"
-    FACEBOOK = "facebook", "Facebook"
-    WHATSAPP = "whatsapp", "WhatsApp"
-    TELEGRAM = "telegram", "Telegram"
-    MANYCHAT = "manychat", "Manychat ID"
+    EMAIL = "email", _("Email")
+    INSTAGRAM = "instagram", _("Instagram")
+    FACEBOOK = "facebook", _("Facebook")
+    WHATSAPP = "whatsapp", _("WhatsApp")
+    TELEGRAM = "telegram", _("Telegram")
+    MANYCHAT = "manychat", _("Manychat ID")
 
 
 class CustomerIdentifier(models.Model):
@@ -63,7 +63,12 @@ class CustomerIdentifier(models.Model):
     class Meta:
         verbose_name = _("identificador")
         verbose_name_plural = _("identificadores")
-        unique_together = ["identifier_type", "identifier_value"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["identifier_type", "identifier_value"],
+                name="guestman_unique_identifier",
+            ),
+        ]
         indexes = [
             models.Index(fields=["identifier_type", "identifier_value"]),
         ]
@@ -72,11 +77,17 @@ class CustomerIdentifier(models.Model):
         return f"{self.get_identifier_type_display()}: {self.identifier_value}"
 
     def save(self, *args, **kwargs):
-        # Normalize value
-        if self.identifier_type == IdentifierType.PHONE:
-            self.identifier_value = self._normalize_phone(self.identifier_value)
+        # Normalize value using centralized function
+        from guestman.utils import normalize_phone
+
+        if self.identifier_type in (IdentifierType.PHONE, IdentifierType.WHATSAPP):
+            self.identifier_value = normalize_phone(self.identifier_value)
         elif self.identifier_type == IdentifierType.EMAIL:
             self.identifier_value = self.identifier_value.lower().strip()
+        elif self.identifier_type == IdentifierType.INSTAGRAM:
+            self.identifier_value = normalize_phone(
+                self.identifier_value, contact_type="instagram"
+            )
 
         # Ensure only one primary per type/customer
         if self.is_primary:
@@ -87,12 +98,3 @@ class CustomerIdentifier(models.Model):
             ).exclude(pk=self.pk).update(is_primary=False)
 
         super().save(*args, **kwargs)
-
-    @staticmethod
-    def _normalize_phone(phone: str) -> str:
-        """Remove formatting, keep only digits."""
-        digits = re.sub(r"\D", "", phone)
-        # Add country code if not present (Brazil)
-        if len(digits) == 11:  # DDD + number
-            digits = f"55{digits}"
-        return digits

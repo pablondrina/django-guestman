@@ -69,6 +69,45 @@ class ExternalIdentityInline(admin.TabularInline):
     readonly_fields = ["provider_uid"]
 
 
+# Optional inlines from contrib modules
+_optional_inlines = []
+
+try:
+    from guestman.contrib.consent.models import CommunicationConsent
+
+    class CommunicationConsentInline(admin.TabularInline):
+        model = CommunicationConsent
+        extra = 0
+        fields = ["channel", "status", "legal_basis", "source", "consented_at", "revoked_at"]
+        readonly_fields = ["consented_at", "revoked_at"]
+
+    _optional_inlines.append(CommunicationConsentInline)
+except ImportError:
+    pass
+
+try:
+    from guestman.contrib.timeline.models import TimelineEvent
+
+    class RecentTimelineInline(admin.TabularInline):
+        model = TimelineEvent
+        extra = 0
+        fields = ["event_type", "title", "channel", "created_at"]
+        readonly_fields = ["event_type", "title", "channel", "created_at"]
+        ordering = ["-created_at"]
+        max_num = 10
+        verbose_name_plural = "Timeline (últimos 10)"
+
+        def has_add_permission(self, request, obj=None):
+            return False
+
+        def has_delete_permission(self, request, obj=None):
+            return False
+
+    _optional_inlines.append(RecentTimelineInline)
+except ImportError:
+    pass
+
+
 # ===========================================
 # Customer Admin
 # ===========================================
@@ -88,7 +127,11 @@ class CustomerAdmin(admin.ModelAdmin):
     search_fields = ["code", "first_name", "last_name", "document", "phone", "email"]
     list_editable = ["is_active"]
     readonly_fields = ["uuid", "created_at", "updated_at"]
-    inlines = [CustomerAddressInline, ContactPointInline, ExternalIdentityInline]
+    inlines = [
+        CustomerAddressInline,
+        ContactPointInline,
+        ExternalIdentityInline,
+    ] + _optional_inlines
 
     fieldsets = [
         (
@@ -178,9 +221,12 @@ class ContactPointAdmin(admin.ModelAdmin):
     value_masked.short_description = "Value"
 
     def customer_link(self, obj):
+        from django.urls import reverse
+
+        url = reverse("admin:guestman_customer_change", args=[obj.customer.pk])
         return format_html(
-            '<a href="/admin/guestman/customer/{}/change/">{}</a>',
-            obj.customer.pk,
+            '<a href="{}">{}</a>',
+            url,
             obj.customer.code,
         )
 
@@ -228,9 +274,12 @@ class ExternalIdentityAdmin(admin.ModelAdmin):
     provider_uid_short.short_description = "Provider UID"
 
     def customer_link(self, obj):
+        from django.urls import reverse
+
+        url = reverse("admin:guestman_customer_change", args=[obj.customer.pk])
         return format_html(
-            '<a href="/admin/guestman/customer/{}/change/">{}</a>',
-            obj.customer.pk,
+            '<a href="{}">{}</a>',
+            url,
             obj.customer.code,
         )
 

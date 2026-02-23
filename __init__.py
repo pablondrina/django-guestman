@@ -2,12 +2,12 @@
 Django Guestman - Customer Management.
 
 Usage:
-    from guestman import CustomerService
+    from guestman.services.customer import get, validate, price_list
     from guestman.gates import Gates, GateError, GateResult
 
-    cust = CustomerService.get("CUST-001")
-    validation = CustomerService.validate("CUST-001")
-    price_list = CustomerService.price_list("CUST-001")
+    cust = get("CUST-001")
+    validation = validate("CUST-001")
+    pl = price_list("CUST-001")
 
     # Gates validation
     Gates.contact_point_uniqueness("whatsapp", "+5543999999999")
@@ -16,10 +16,6 @@ Usage:
 
 
 def __getattr__(name):
-    if name == "CustomerService":
-        from guestman.service import CustomerService
-
-        return CustomerService
     if name == "Gates":
         from guestman.gates import Gates
 
@@ -35,5 +31,5 @@ def __getattr__(name):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-__all__ = ["CustomerService", "Gates", "GateError", "GateResult"]
+__all__ = ["Gates", "GateError", "GateResult"]
 __version__ = "0.5.0"

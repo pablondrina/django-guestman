@@ -1,5 +1,7 @@
 """Identifier service for lookup and management."""
 
+from django.db import transaction
+
 from guestman.contrib.identifiers.models import CustomerIdentifier, IdentifierType
 from guestman.models import Customer
 
@@ -120,23 +122,21 @@ class IdentifierService:
         if customer:
             return customer, False
 
-        # Create new customer
+        # Create new customer + identifier atomically
         defaults = defaults or {}
         if "code" not in defaults:
-            # Generate code from identifier
             defaults["code"] = cls._generate_code_from_identifier(
                 identifier_type, identifier_value
             )
 
-        customer = Customer.objects.create(**defaults)
-
-        # Add the identifier
-        cls.add_identifier(
-            customer.code,
-            identifier_type,
-            identifier_value,
-            is_primary=True,
-        )
+        with transaction.atomic():
+            customer = Customer.objects.create(**defaults)
+            cls.add_identifier(
+                customer.code,
+                identifier_type,
+                identifier_value,
+                is_primary=True,
+            )
 
         return customer, True
 
@@ -153,15 +153,14 @@ class IdentifierService:
     @classmethod
     def _normalize_value(cls, identifier_type: str, value: str) -> str:
         """Normalize identifier value based on type."""
-        import re
+        from guestman.utils import normalize_phone
 
-        if identifier_type == IdentifierType.PHONE:
-            digits = re.sub(r"\D", "", value)
-            if len(digits) == 11:
-                digits = f"55{digits}"
-            return digits
+        if identifier_type in (IdentifierType.PHONE, IdentifierType.WHATSAPP):
+            return normalize_phone(value)
         elif identifier_type == IdentifierType.EMAIL:
             return value.lower().strip()
+        elif identifier_type == IdentifierType.INSTAGRAM:
+            return normalize_phone(value, contact_type="instagram")
         return value.strip()
 
     @classmethod

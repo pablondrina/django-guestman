@@ -14,6 +14,8 @@ import hmac
 import time
 from dataclasses import dataclass
 
+from django.db import IntegrityError, transaction
+
 
 class GateError(Exception):
     """Gate validation error."""
@@ -211,6 +213,13 @@ class Gates:
         """
         if not secret:
             # No secret configured = skip validation (dev mode)
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "G4_ProviderEventAuthenticity: webhook secret is empty — "
+                "all payloads are accepted without signature validation. "
+                "Set the webhook secret before deploying to production."
+            )
             return GateResult(
                 True, "G4_ProviderEventAuthenticity", "No secret configured (skipped)"
             )
@@ -288,8 +297,9 @@ class Gates:
 
         # Try to create record - unique constraint will prevent duplicates
         try:
-            ProcessedEvent.objects.create(nonce=nonce, provider=provider)
-        except Exception:
+            with transaction.atomic():
+                ProcessedEvent.objects.create(nonce=nonce, provider=provider)
+        except IntegrityError:
             # IntegrityError means nonce already exists = replay
             # Check if it actually exists (could be other DB error)
             if ProcessedEvent.objects.filter(nonce=nonce).exists():

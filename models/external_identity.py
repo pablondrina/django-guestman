@@ -24,13 +24,13 @@ class ExternalIdentity(models.Model):
     """
 
     class Provider(models.TextChoices):
-        MANYCHAT = "manychat", "ManyChat"
-        WHATSAPP = "whatsapp", "WhatsApp Business"
-        INSTAGRAM = "instagram", "Instagram"
-        FACEBOOK = "facebook", "Facebook"
-        GOOGLE = "google", "Google"
-        APPLE = "apple", "Apple"
-        TELEGRAM = "telegram", "Telegram"
+        MANYCHAT = "manychat", _("ManyChat")
+        WHATSAPP = "whatsapp", _("WhatsApp Business")
+        INSTAGRAM = "instagram", _("Instagram")
+        FACEBOOK = "facebook", _("Facebook")
+        GOOGLE = "google", _("Google")
+        APPLE = "apple", _("Apple")
+        TELEGRAM = "telegram", _("Telegram")
         OTHER = "other", _("Outro")
 
     # Identification

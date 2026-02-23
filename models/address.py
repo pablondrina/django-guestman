@@ -126,10 +126,11 @@ class CustomerAddress(models.Model):
     def __str__(self):
         label_display = (
             self.label_custom
-            if self.label == AddressLabel.OTHER
+            if self.label == AddressLabel.OTHER and self.label_custom
             else self.get_label_display()
         )
-        return f"{label_display}: {self.formatted_address[:50]}..."
+        addr = self.formatted_address[:50] if self.formatted_address else ""
+        return f"{label_display}: {addr}"
 
     @property
     def display_label(self) -> str:
@@ -140,13 +141,15 @@ class CustomerAddress(models.Model):
 
     @property
     def short_address(self) -> str:
-        """Short address for lists."""
-        parts = [self.route]
+        """Short address for lists. Safe when fields are empty."""
+        parts = []
+        if self.route:
+            parts.append(self.route)
         if self.street_number:
             parts.append(self.street_number)
         if self.neighborhood:
             parts.append(f"- {self.neighborhood}")
-        return " ".join(parts)
+        return " ".join(parts) if parts else self.formatted_address[:60]
 
     def save(self, *args, **kwargs):
         if self.is_default:

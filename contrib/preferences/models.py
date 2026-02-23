@@ -74,7 +74,12 @@ class CustomerPreference(models.Model):
     class Meta:
         verbose_name = _("preferência")
         verbose_name_plural = _("preferências")
-        unique_together = ["customer", "category", "key"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["customer", "category", "key"],
+                name="guestman_unique_preference",
+            ),
+        ]
         ordering = ["category", "key"]
 
     def __str__(self):

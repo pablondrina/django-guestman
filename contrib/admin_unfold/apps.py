@@ -1,7 +1,8 @@
 from django.apps import AppConfig
+from django.utils.translation import gettext_lazy as _
 
 
 class GuestmanAdminUnfoldConfig(AppConfig):
     name = "guestman.contrib.admin_unfold"
     label = "guestman_admin_unfold"
-    verbose_name = "Guestman Admin (Unfold)"
+    verbose_name = _("Admin (Unfold)")

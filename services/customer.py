@@ -1,8 +1,17 @@
-"""Customer service - core CRUD and validation."""
+"""Customer service - core CRUD and validation.
 
+All write operations that touch >1 record use transaction.atomic().
+"""
+
+import logging
 from dataclasses import dataclass
 
+from django.db import transaction
+
 from guestman.models import Customer, CustomerGroup
+from guestman.signals import customer_created, customer_updated
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -48,14 +57,22 @@ def get_by_document(document: str) -> Customer | None:
 
 
 def get_by_phone(phone: str) -> Customer | None:
-    """Get customer by phone."""
-    phone_normalized = "".join(filter(str.isdigit, phone))
+    """Get customer by phone (exact match on normalized E.164)."""
+    from commons.phone import normalize_phone
+
+    phone_normalized = normalize_phone(phone)
+    if not phone_normalized:
+        return None
     try:
         return Customer.objects.select_related("group").get(
-            phone__contains=phone_normalized, is_active=True
+            phone=phone_normalized, is_active=True
         )
     except Customer.DoesNotExist:
         return None
+    except Customer.MultipleObjectsReturned:
+        return Customer.objects.filter(
+            phone=phone_normalized, is_active=True
+        ).first()
 
 
 def get_by_email(email: str) -> Customer | None:
@@ -156,28 +173,55 @@ def create(
         except CustomerGroup.DoesNotExist:
             pass
 
-    return Customer.objects.create(
-        code=code,
-        first_name=first_name,
-        last_name=last_name,
-        customer_type=customer_type,
-        document="".join(filter(str.isdigit, document)),
-        email=email,
-        phone=phone,
-        group=group,
-        **kwargs,
-    )
+    with transaction.atomic():
+        cust = Customer.objects.create(
+            code=code,
+            first_name=first_name,
+            last_name=last_name,
+            customer_type=customer_type,
+            document="".join(filter(str.isdigit, document)),
+            email=email,
+            phone=phone,
+            group=group,
+            **kwargs,
+        )
+
+    customer_created.send(sender=Customer, customer=cust)
+    return cust
+
+
+UPDATABLE_FIELDS = {
+    "first_name",
+    "last_name",
+    "customer_type",
+    "document",
+    "email",
+    "phone",
+    "group",
+    "notes",
+    "metadata",
+    "is_active",
+    "source_system",
+}
 
 
 def update(code: str, **fields) -> Customer | None:
-    """Update customer fields."""
+    """Update customer fields (only whitelisted fields are accepted)."""
     cust = get(code)
     if not cust:
         return None
 
+    changes = {}
     for key, value in fields.items():
+        if key not in UPDATABLE_FIELDS:
+            continue
         if hasattr(cust, key):
+            old_value = getattr(cust, key)
+            if old_value != value:
+                changes[key] = {"old": old_value, "new": value}
             setattr(cust, key, value)
 
     cust.save()
+    if changes:
+        customer_updated.send(sender=Customer, customer=cust, changes=changes)
     return cust

@@ -15,5 +15,3 @@ Usage:
 
     customer = ManychatService.sync_subscriber(subscriber_data)
 """
-
-default_app_config = "guestman.contrib.manychat.apps.ManychatConfig"

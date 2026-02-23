@@ -1,7 +1,8 @@
 from django.apps import AppConfig
+from django.utils.translation import gettext_lazy as _
 
 
 class GuestmanConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "guestman"
-    verbose_name = "Guestman - Customer Management"
+    verbose_name = _("Gestão de Clientes")

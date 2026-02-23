@@ -27,5 +27,3 @@ def __getattr__(name):
 
 
 __all__ = ["PreferenceService"]
-
-default_app_config = "guestman.contrib.preferences.apps.PreferencesConfig"

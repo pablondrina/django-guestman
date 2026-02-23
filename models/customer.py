@@ -1,4 +1,21 @@
-"""Customer model (CORE - agnóstico)."""
+"""Customer model (CORE - agnóstico).
+
+Data architecture:
+    Customer.phone / Customer.email
+        Quick-access cache for the primary contact. Used by services for fast
+        lookups (get_by_phone, get_by_email) without joining ContactPoint.
+        Updated automatically via _sync_contact_points() on save().
+
+    ContactPoint
+        Source of truth for all contact channels (WhatsApp, phone, email, Instagram).
+        Carries verification status, verification method, and is_primary flag.
+        One primary per (customer, type). Globally unique (type, value_normalized).
+
+    CustomerIdentifier (contrib)
+        Deduplication lookup table. Maps external identifiers (Manychat, Instagram
+        handle, etc.) to customers. Used by IdentifierService.find_by_identifier()
+        for cross-channel customer resolution.
+"""
 
 import uuid as uuid_lib
 
@@ -17,6 +34,9 @@ class Customer(models.Model):
 
     CORE: Essential and channel-agnostic data only.
     Channel-specific data (Manychat, etc.) goes in contrib/identifiers and contrib/manychat.
+
+    phone/email fields are quick-access cache. ContactPoint is source of truth.
+    See module docstring for full data architecture.
     """
 
     # Identification (code + uuid pattern - see spec 000 section 12.2)
@@ -47,10 +67,9 @@ class Customer(models.Model):
         help_text=_("CPF ou CNPJ (apenas números)"),
     )
 
-    # Primary contact (core - email and phone are universal)
-    # DEPRECATED: Use ContactPoint for multi-channel contacts
-    email = models.EmailField(_("email (legado)"), blank=True, db_index=True)
-    phone = models.CharField(_("telefone (legado)"), max_length=20, blank=True, db_index=True)
+    # Primary contact
+    email = models.EmailField(_("email"), blank=True, db_index=True)
+    phone = models.CharField(_("telefone"), max_length=20, blank=True, db_index=True)
 
     # Segmentation
     group = models.ForeignKey(
@@ -109,16 +128,11 @@ class Customer(models.Model):
         return self.addresses.filter(is_default=True).first()
 
     def save(self, *args, **kwargs):
-        # Normalize phone to E.164 format (digits only, with country code)
+        # Normalize phone using centralized function
         if self.phone:
-            import re
-            digits = re.sub(r"\D", "", self.phone)
-            # Add Brazil country code if not present
-            if len(digits) == 11:  # DDD + 9 digits
-                digits = f"55{digits}"
-            elif len(digits) == 10:  # DDD + 8 digits (landline)
-                digits = f"55{digits}"
-            self.phone = digits
+            from guestman.utils import normalize_phone
+
+            self.phone = normalize_phone(self.phone)
 
         # Normalize email (lowercase)
         if self.email:
@@ -133,3 +147,50 @@ class Customer(models.Model):
                 self.group = default_group
 
         super().save(*args, **kwargs)
+
+        # Sync cache → ContactPoint (source of truth)
+        self._sync_contact_points()
+
+    def _sync_contact_points(self):
+        """
+        Ensure Customer.phone/email are mirrored as ContactPoints.
+
+        Creates or updates the primary ContactPoint for phone and email
+        when Customer.phone or Customer.email change. ContactPoint remains
+        source of truth for verification status.
+
+        Called automatically on save(). Safe to call multiple times.
+        """
+        from guestman.models.contact_point import ContactPoint
+
+        if not self.pk:
+            return
+
+        if self.phone:
+            cp, created = ContactPoint.objects.get_or_create(
+                customer=self,
+                type=ContactPoint.Type.PHONE,
+                value_normalized=self.phone,
+                defaults={"is_primary": True},
+            )
+            if created:
+                # Ensure only one primary for this type
+                ContactPoint.objects.filter(
+                    customer=self,
+                    type=ContactPoint.Type.PHONE,
+                    is_primary=True,
+                ).exclude(pk=cp.pk).update(is_primary=False)
+
+        if self.email:
+            cp, created = ContactPoint.objects.get_or_create(
+                customer=self,
+                type=ContactPoint.Type.EMAIL,
+                value_normalized=self.email,
+                defaults={"is_primary": True},
+            )
+            if created:
+                ContactPoint.objects.filter(
+                    customer=self,
+                    type=ContactPoint.Type.EMAIL,
+                    is_primary=True,
+                ).exclude(pk=cp.pk).update(is_primary=False)

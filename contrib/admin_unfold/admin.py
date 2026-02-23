@@ -13,31 +13,13 @@ from django.urls import reverse
 from django.utils.html import format_html
 from unfold.decorators import display
 
-from guestman.contrib.admin_unfold.base import BaseModelAdmin, BaseTabularInline
+from shopman_commons.contrib.admin_unfold.badges import unfold_badge
+from shopman_commons.contrib.admin_unfold.base import BaseModelAdmin, BaseTabularInline
 from guestman.models import (
     Customer,
     CustomerGroup,
     CustomerAddress,
 )
-
-
-def _unfold_badge(text, color="base"):
-    """Create Unfold badge with colored background."""
-    base_classes = (
-        "inline-block font-semibold h-6 leading-6 px-2 "
-        "rounded-default whitespace-nowrap text-xs uppercase"
-    )
-
-    color_classes = {
-        "base": "bg-base-100 text-base-700 dark:bg-base-500/20 dark:text-base-200",
-        "red": "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
-        "green": "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400",
-        "yellow": "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-400",
-        "blue": "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
-    }
-
-    classes = f"{base_classes} {color_classes.get(color, color_classes['base'])}"
-    return format_html('<span class="{}">{}</span>', classes, text)
 
 
 # Unregister basic admins
@@ -143,7 +125,7 @@ class CustomerAdmin(BaseModelAdmin):
             "company": "green",
         }
         color = colors.get(obj.customer_type, "base")
-        return _unfold_badge(obj.get_customer_type_display(), color)
+        return unfold_badge(obj.get_customer_type_display(), color)
 
     @display(description="Active", boolean=True)
     def is_active_badge(self, obj):
@@ -201,7 +183,7 @@ class CustomerAddressAdmin(BaseModelAdmin):
             "other": "base",
         }
         color = colors.get(obj.label, "base")
-        return _unfold_badge(obj.get_label_display(), color)
+        return unfold_badge(obj.get_label_display(), color)
 
     @display(description="Default", boolean=True)
     def is_default_badge(self, obj):

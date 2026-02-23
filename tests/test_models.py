@@ -101,7 +101,7 @@ class TestCustomerIdentifier:
             identifier_type=IdentifierType.PHONE,
             identifier_value="5511999999999",
         )
-        assert ident.identifier_value == "5511999999999"
+        assert ident.identifier_value == "+5511999999999"
 
     def test_phone_normalization(self, customer):
         """Test phone number normalization."""
@@ -110,7 +110,7 @@ class TestCustomerIdentifier:
             identifier_type=IdentifierType.PHONE,
             identifier_value="(11) 98765-4321",
         )
-        assert ident.identifier_value == "5511987654321"
+        assert ident.identifier_value == "+5511987654321"
 
     def test_email_normalization(self, customer):
         """Test email normalization."""
